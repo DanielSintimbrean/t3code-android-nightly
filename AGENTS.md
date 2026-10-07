@@ -8,7 +8,8 @@ This repository publishes unofficial Android APKs of T3 Code (https://github.com
 - Never commit keystores, passwords, `release.env` or `dist/`.
 - The signing key must never change. Obtainium and Android reject updates signed with a different certificate, so don't add debug-key fallbacks.
 - `versionCode` must increase with every release.
-- Release notes end with HTML comment markers (`upstream-sha`, `version-code`, `signing-cert`, `t3-connect`, `tooling-rev`). The script reads them from the latest release to skip unchanged builds, keep `versionCode` increasing and refuse a different signing key. Keep them when editing the notes.
+- Only upstream `v*-nightly.*` tags are built; the release tag and `versionName` equal the upstream tag. Publishing commits the "Current build" block in `README.md` (between the `current-build` markers) and pushes it before creating the release.
+- Release notes end with HTML comment markers (`upstream-tag`, `upstream-sha`, `version-code`, `signing-cert`, `t3-connect`, `tooling-rev`). The script reads them from the latest release to keep `versionCode` increasing and refuse a different signing key. Keep them when editing the notes.
 - Don't publish releases, push, or create tags unless the maintainer asks. Use `mise run release -- --dry-run` to validate changes.
 
 ## Layout

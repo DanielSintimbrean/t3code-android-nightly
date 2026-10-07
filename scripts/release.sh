@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Builds the T3 Code Android Preview APK from upstream, signs it with the
-# stable release key, verifies it and publishes it as a GitHub Release.
+# Builds the T3 Code Android Preview APK from an upstream nightly tag, signs
+# it with the stable release key, verifies it, records the version in
+# README.md and publishes it as a GitHub Release.
 #
-# Usage: scripts/release.sh [--ref REF] [--dry-run] [--force] [--repo OWNER/NAME]
+# Usage: scripts/release.sh [--tag TAG] [--dry-run] [--repo OWNER/NAME]
 #                           [--version-code N] [--no-t3-connect]
 set -euo pipefail
 
@@ -10,9 +11,9 @@ usage() {
   cat <<'EOF'
 Usage: scripts/release.sh [options]
 
-  --ref REF           Upstream branch, tag or commit to build (default: main)
-  --dry-run           Build and verify, but do not create a GitHub Release
-  --force             Build even if the latest release already has this upstream commit
+  --tag TAG           Upstream tag to build (default: the newest v*-nightly.* tag)
+  --dry-run           Build and verify, even if already released, but do not
+                      commit, push or create a GitHub Release
   --repo OWNER/NAME   GitHub repository to publish to
                       (default: $NIGHTLY_REPO, the origin remote, or
                       DanielSintimbrean/t3code-android-nightly)
@@ -36,18 +37,16 @@ die() {
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ref="main"
+tag=""
 dry_run=0
-force=0
 repo=""
 version_code=""
 t3_connect_override=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --ref) ref="${2:?--ref needs a value}"; shift 2 ;;
+    --tag) tag="${2:?--tag needs a value}"; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
-    --force) force=1; shift ;;
     --repo) repo="${2:?--repo needs a value}"; shift 2 ;;
     --version-code) version_code="${2:?--version-code needs a value}"; shift 2 ;;
     --no-t3-connect) t3_connect_override=0; shift ;;
@@ -161,6 +160,18 @@ else
   warn "gh cannot access $repo; skipping release checks in dry-run mode"
 fi
 
+# Publishing commits README.md and pushes it, so start from a clean checkout
+# that matches its remote branch.
+branch=""
+if [[ $dry_run -eq 0 ]]; then
+  [[ -z "$(git -C "$repo_root" status --porcelain)" ]] ||
+    die "the repository has uncommitted changes; commit or stash them first"
+  branch="$(git -C "$repo_root" symbolic-ref --short -q HEAD)" || die "the repository is not on a branch"
+  git -C "$repo_root" fetch --quiet origin "$branch" || die "could not fetch origin/$branch"
+  [[ "$(git -C "$repo_root" rev-parse HEAD)" == "$(git -C "$repo_root" rev-parse "origin/$branch")" ]] ||
+    die "$branch is not in sync with origin/$branch; pull or push first"
+fi
+
 mkdir -p "$cache_dir"
 exec 9>"$cache_dir/release.lock"
 flock -n 9 || die "another release is already running (lock: $cache_dir/release.lock)"
@@ -172,15 +183,29 @@ if [[ ! -d "$src/.git" ]]; then
   git clone --filter=blob:none --no-checkout "$upstream_url" "$src"
 fi
 git -C "$src" remote set-url origin "$upstream_url"
-git -C "$src" fetch --prune --tags --force origin '+refs/heads/*:refs/remotes/origin/*'
+git -C "$src" fetch --prune --prune-tags --tags --force origin
 
-sha="$(git -C "$src" rev-parse --verify --quiet "origin/$ref^{commit}" ||
-  git -C "$src" rev-parse --verify --quiet "$ref^{commit}")" ||
-  die "upstream ref not found: $ref"
+# Upstream tags each nightly as vX.Y.Z-nightly.YYYYMMDD.N. Only tags trigger
+# a build, so commits on main without a new tag are ignored.
+if [[ -z "$tag" ]]; then
+  tag="$(git -C "$src" tag -l 'v*-nightly.*' --sort=-v:refname | sed -n 1p)"
+  [[ -n "$tag" ]] || die "upstream has no v*-nightly.* tags"
+fi
+[[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || die "unsupported tag name: $tag"
+sha="$(git -C "$src" rev-parse --verify --quiet "refs/tags/$tag^{commit}")" ||
+  die "upstream tag not found: $tag"
 short="${sha:0:7}"
 subject="$(git -C "$src" log -1 --format=%s "$sha")"
 commit_date="$(git -C "$src" log -1 --format=%cI "$sha")"
-log "Upstream $ref is $sha ($subject)"
+log "Upstream $tag is $sha ($subject)"
+
+if [[ $gh_ready -eq 1 ]] && release_exists "$tag"; then
+  if [[ $dry_run -eq 0 ]]; then
+    log "$tag is already released; nothing to do"
+    exit 0
+  fi
+  warn "$tag is already released; building anyway because of --dry-run"
+fi
 
 # Each release body ends with machine-readable markers (see the notes below).
 previous_sha=""
@@ -196,10 +221,6 @@ if [[ $gh_ready -eq 1 ]]; then
   previous_cert="$(marker signing-cert)"
   if [[ -n "$previous_cert" && "$previous_cert" != "$expected_cert" ]]; then
     die "the keystore certificate ($expected_cert) differs from the one that signed the latest release ($previous_cert); users could not update"
-  fi
-  if [[ "$previous_sha" == "$sha" && $force -eq 0 ]]; then
-    log "The latest release already has upstream $short; nothing to do (use --force to rebuild)"
-    exit 0
   fi
 fi
 
@@ -228,12 +249,6 @@ else
 fi
 
 # --- Version ----------------------------------------------------------------
-
-tag="nightly-$(date -u +%Y%m%d)-$short"
-if [[ $gh_ready -eq 1 ]] && release_exists "$tag"; then
-  tag="$tag-$(date -u +%H%M%S)"
-  ! release_exists "$tag" || die "release $tag already exists"
-fi
 
 # Minutes since the epoch, bumped past the latest release if needed, so every
 # release has a higher versionCode than the one before.
@@ -273,9 +288,8 @@ log "Running expo prebuild (Android, preview)"
 
 gradle_file="$src/apps/mobile/android/app/build.gradle"
 [[ -f "$gradle_file" ]] || die "prebuild did not produce $gradle_file"
-base_version="$(sed -n -E 's/^[[:space:]]*versionName "([^"]+)".*/\1/p' "$gradle_file" | sed -n 1p)"
-[[ -n "$base_version" ]] || die "versionName not found in $gradle_file"
-version_name="$base_version-$tag"
+# The version name is the upstream tag, the same string as the release tag.
+version_name="$tag"
 sed -i -E \
   -e "s/^([[:space:]]*)versionCode [0-9]+/\1versionCode $version_code/" \
   -e "s/^([[:space:]]*)versionName \"[^\"]+\"/\1versionName \"$version_name\"/" \
@@ -363,9 +377,9 @@ notes="$out_dir/release-notes.md"
 cat >"$notes" <<EOF
 Unofficial nightly build of the [T3 Code]($upstream_web) Android app (Preview variant). Not affiliated with or endorsed by T3 Tools Inc.
 
-- Upstream commit: [\`$short\`]($upstream_web/commit/$sha) $subject ($commit_date)
+- Upstream: [\`$tag\`]($upstream_web/tree/$tag), commit [\`$short\`]($upstream_web/commit/$sha) $subject ($commit_date)
 ${compare_line}- Package: \`$expected_package\` (installs alongside the Play Store app)
-- Version: \`$version_name\` (versionCode $version_code)
+- versionCode: $version_code
 - APK SHA-256: \`$apk_sha256\`
 - Signing certificate SHA-256: \`$expected_cert\`
 $t3_connect_line
@@ -374,6 +388,7 @@ Connect it to a T3 Code server that is compatible with this upstream commit.
 
 T3 Code is copyright T3 Tools Inc. and released under the MIT License; see \`LICENSE-t3code.txt\`.
 
+<!-- upstream-tag: $tag -->
 <!-- upstream-sha: $sha -->
 <!-- version-code: $version_code -->
 <!-- signing-cert: $expected_cert -->
@@ -398,14 +413,34 @@ fi
 
 # --- Publish ----------------------------------------------------------------
 
-[[ "$tooling_rev" != *-dirty && "$tooling_rev" != none ]] ||
-  warn "publishing from uncommitted tooling ($tooling_rev)"
+log "Recording $tag in README.md"
+[[ -z "$(git -C "$repo_root" status --porcelain)" ]] ||
+  die "the repository changed during the build; not committing"
+readme="$repo_root/README.md"
+grep -q '<!-- current-build:start -->' "$readme" && grep -q '<!-- current-build:end -->' "$readme" ||
+  die "README.md is missing the current-build markers"
+current_build="**[$tag](https://github.com/$repo/releases/tag/$tag)**, built from upstream commit [\`$short\`]($upstream_web/commit/$sha) on $(date -u +%Y-%m-%d)."
+awk -v line="$current_build" '
+  /<!-- current-build:start -->/ { print; print line; skip = 1; next }
+  /<!-- current-build:end -->/ { skip = 0 }
+  !skip { print }
+' "$readme" >"$readme.tmp"
+mv "$readme.tmp" "$readme"
+# A rerun after a failed release finds the README already up to date.
+if ! git -C "$repo_root" diff --quiet -- README.md; then
+  git -C "$repo_root" commit --quiet -m "Release $tag" -- README.md
+  if ! git -C "$repo_root" push --quiet origin "HEAD:$branch"; then
+    git -C "$repo_root" reset --quiet --hard HEAD~1
+    die "git push failed; the README commit was undone"
+  fi
+fi
 
 # gh uploads to a draft and only publishes once every asset is attached.
 log "Publishing $tag to $repo"
 gh release create "$tag" \
   --repo "$repo" \
-  --title "T3 Code Preview $version_name" \
+  --target "$(git -C "$repo_root" rev-parse HEAD)" \
+  --title "T3 Code Preview $tag" \
   --notes-file "$notes" \
   --latest \
   "$apk" \
