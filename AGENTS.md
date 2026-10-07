@@ -9,7 +9,7 @@ This repository publishes unofficial Android APKs of T3 Code (https://github.com
 - The signing key must never change. Obtainium and Android reject updates signed with a different certificate, so don't add debug-key fallbacks.
 - `versionCode` must increase with every release.
 - Only upstream `v*-nightly.*` tags are built; the release tag and `versionName` equal the upstream tag. Publishing commits the "Current build" block in `README.md` (between the `current-build` markers) and pushes it before creating the release.
-- Release notes end with HTML comment markers (`upstream-tag`, `upstream-sha`, `version-code`, `signing-cert`, `t3-connect`, `tooling-rev`). The script reads them from the latest release to keep `versionCode` increasing and refuse a different signing key. Keep them when editing the notes.
+- Release notes end with HTML comment markers (`upstream-tag`, `upstream-sha`, `version-code`, `signing-cert`, `t3-connect`, `architectures`, `tooling-rev`). The script reads them from the latest release to keep `versionCode` increasing and refuse a different signing key. Keep them when editing the notes.
 - Don't publish releases, push, or create tags unless the maintainer asks. Use `mise run release -- --dry-run` to validate changes.
 
 ## Layout
@@ -22,7 +22,7 @@ This repository publishes unofficial Android APKs of T3 Code (https://github.com
 
 ## Upstream build flow
 
-Mirrors upstream `apps/mobile/README.md`: `vp i` at the root, then in `apps/mobile` with `APP_VARIANT=preview` and `T3CODE_MOBILE_UPDATES_ENABLED=0`, `vp exec -- expo prebuild --platform android` and `cd android && ./gradlew :app:assembleRelease`. Gradle signs with the generated debug key; `scripts/release.sh` then re-signs with `apksigner` so upstream build code never gets the release key. T3 Connect is enabled by copying upstream's `.env.example` (public production Clerk and relay identifiers) to `.env` in the checkout before the build; `--no-t3-connect` skips it. If upstream changes this flow, update `scripts/release.sh` and the README together.
+Mirrors upstream `apps/mobile/README.md`: `vp i` at the root, then in `apps/mobile` with `APP_VARIANT=preview` and `T3CODE_MOBILE_UPDATES_ENABLED=0`, `vp exec -- expo prebuild --platform android` and `cd android && ./gradlew :app:assembleRelease`. Gradle signs with the generated debug key; `scripts/release.sh` then re-signs with `apksigner` so upstream build code never gets the release key. T3 Connect is enabled by copying upstream's `.env.example` (public production Clerk and relay identifiers) to `.env` in the checkout before the build; `--no-t3-connect` skips it. To keep builds fast, Gradle runs with `--build-cache` (the prebuild output is wiped each run, so only `~/.gradle`'s cache carries over) and `-PreactNativeArchitectures` set from `NIGHTLY_ARCHITECTURES` (default `arm64-v8a`). If upstream changes this flow, update `scripts/release.sh` and the README together.
 
 Build-time workarounds in `scripts/release.sh` (drop each one once upstream fixes it):
 

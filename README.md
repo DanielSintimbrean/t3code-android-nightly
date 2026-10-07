@@ -22,6 +22,7 @@ What you get:
 
 - The **Preview** variant of the mobile app: package `com.t3tools.t3code.preview`, shown as **T3 Code Preview**. It installs alongside the T3 Code app from Google Play and does not replace it.
 - A build of each upstream nightly tag, such as `v0.0.46-nightly.20261007.2774`. The release tag and the app's version name are that same tag. Upstream commits without a new nightly tag are not built.
+- Native code is built for 64-bit ARM (`arm64-v8a`) only, which covers current Android phones. 32-bit devices and x86 emulators are not supported.
 - Over-the-air updates are disabled; new versions arrive only as new releases.
 - T3 Connect is enabled and uses the official production service (`relay.t3.codes` and T3's Clerk sign-in), configured with the public identifiers upstream ships in its `.env.example`. You can also connect to a server directly (local network, Tailscale, etc.). This build is signed with a different key than the official app, so sign-in methods tied to the official app's signature, such as passkeys or native Google sign-in, may not work.
 
@@ -74,11 +75,11 @@ The script:
 2. Clones or updates upstream into `~/.cache/t3code-android-nightly/upstream` (override with `NIGHTLY_CACHE_DIR`) and picks the newest `v*-nightly.*` tag. If a release with that tag already exists, it stops: new upstream commits without a new tag are ignored.
 3. Reads the markers at the end of the latest release's notes and refuses to continue if the keystore's certificate differs from the one that signed it.
 4. Copies upstream's `.env.example` to `.env` in the checkout to enable T3 Connect (skip with `--no-t3-connect` or `NIGHTLY_T3_CONNECT=0`).
-5. Runs `vp i --frozen-lockfile`, then `expo prebuild --platform android` and `./gradlew :app:assembleRelease` in `apps/mobile` with `APP_VARIANT=preview` and `T3CODE_MOBILE_UPDATES_ENABLED=0`.
+5. Runs `vp i --frozen-lockfile`, then `expo prebuild --platform android` and `./gradlew :app:assembleRelease` in `apps/mobile` with `APP_VARIANT=preview` and `T3CODE_MOBILE_UPDATES_ENABLED=0`. Native code is compiled only for `arm64-v8a` (override with `NIGHTLY_ARCHITECTURES`), and Gradle's build cache in `~/.gradle` reuses outputs from earlier builds.
 6. Patches the generated `android/app/build.gradle` in the cache, not upstream sources, so that:
    - `versionCode` is the build time in minutes since the Unix epoch, raised above the latest release's if needed, so it always increases.
    - `versionName` is the upstream tag, for example `v0.0.46-nightly.20261007.2774`.
-7. Signs the APK with `apksigner` after Gradle finishes, so build scripts never see the key. It then checks the package id, version, signing certificate, 16 KB zip alignment, that the JS bundle is present and that the T3 Connect config is embedded.
+7. Signs the APK with `apksigner` after Gradle finishes, so build scripts never see the key. It then checks the package id, version, signing certificate, 16 KB zip alignment, the native library ABIs, that the JS bundle is present and that the T3 Connect config is embedded.
 8. Writes the APK, its SHA-256, the upstream license and the release notes to `dist/<tag>/`.
 9. Updates the "Current build" line in this README, commits it as `Release <tag>`, pushes, and creates the GitHub Release on that commit.
 

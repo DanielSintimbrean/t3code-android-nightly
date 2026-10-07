@@ -77,6 +77,12 @@ key_alias="$NIGHTLY_KEY_ALIAS"
 expected_package="com.t3tools.t3code.preview"
 max_version_code=2100000000
 
+# Native code is compiled once per ABI, which dominates the build time.
+# 64-bit ARM covers current phones; add ABIs as a comma-separated list.
+architectures="${NIGHTLY_ARCHITECTURES:-arm64-v8a}"
+[[ "$architectures" =~ ^(armeabi-v7a|arm64-v8a|x86|x86_64)(,(armeabi-v7a|arm64-v8a|x86|x86_64))*$ ]] ||
+  die "NIGHTLY_ARCHITECTURES must be a comma-separated list of armeabi-v7a, arm64-v8a, x86, x86_64"
+
 t3_connect="${t3_connect_override:-${NIGHTLY_T3_CONNECT:-1}}"
 [[ "$t3_connect" == 0 || "$t3_connect" == 1 ]] || die "NIGHTLY_T3_CONNECT must be 0 or 1"
 # The checkout's .env is the only source of T3 Connect settings; upstream's
@@ -299,9 +305,12 @@ grep -q "versionName \"$version_name\"" "$gradle_file" || die "could not set ver
 log "Version $version_name (versionCode $version_code)"
 
 # Gradle signs with the template's debug key; the release key is applied
-# afterwards so that no build script ever sees it.
-log "Building release APK"
-(cd "$src/apps/mobile/android" && ./gradlew :app:assembleRelease --no-daemon)
+# afterwards so that no build script ever sees it. The android/ directory is
+# regenerated every run, so task outputs are reused through the build cache in
+# ~/.gradle instead of the project's up-to-date checks.
+log "Building release APK ($architectures)"
+(cd "$src/apps/mobile/android" &&
+  ./gradlew :app:assembleRelease --no-daemon --build-cache -PreactNativeArchitectures="$architectures")
 
 built_apk="$src/apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
 [[ -f "$built_apk" ]] || die "APK not found at $built_apk"
@@ -336,6 +345,10 @@ certs="$("$build_tools/apksigner" verify --print-certs "$apk")" || die "apksigne
 signer_certs="$(sed -n 's/.*certificate SHA-256 digest: //p' <<<"$certs" | normalize_digest | sort -u)"
 [[ "$signer_certs" == "$expected_cert" ]] ||
   die "APK is signed with '$(tr '\n' ' ' <<<"$signer_certs")', expected the release key $expected_cert"
+
+apk_abis="$(unzip -Z1 "$apk" 'lib/*' 2>/dev/null | cut -d/ -f2 | sort -u | paste -sd,)"
+[[ "$apk_abis" == "$(tr ',' '\n' <<<"$architectures" | sort -u | paste -sd,)" ]] ||
+  die "APK native libraries are for '$apk_abis', expected '$architectures'"
 
 bundle_size="$(unzip -l "$apk" assets/index.android.bundle | awk '$4 == "assets/index.android.bundle" { print $1 }')"
 [[ "${bundle_size:-0}" -gt 0 ]] || die "assets/index.android.bundle is missing from the APK"
@@ -379,6 +392,7 @@ Unofficial nightly build of the [T3 Code]($upstream_web) Android app (Preview va
 
 - Upstream: [\`$tag\`]($upstream_web/tree/$tag), commit [\`$short\`]($upstream_web/commit/$sha) $subject ($commit_date)
 ${compare_line}- Package: \`$expected_package\` (installs alongside the Play Store app)
+- ABIs: $architectures
 - versionCode: $version_code
 - APK SHA-256: \`$apk_sha256\`
 - Signing certificate SHA-256: \`$expected_cert\`
@@ -393,6 +407,7 @@ T3 Code is copyright T3 Tools Inc. and released under the MIT License; see \`LIC
 <!-- version-code: $version_code -->
 <!-- signing-cert: $expected_cert -->
 <!-- t3-connect: $t3_connect -->
+<!-- architectures: $architectures -->
 <!-- tooling-rev: $tooling_rev -->
 EOF
 
