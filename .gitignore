@@ -1,0 +1,13 @@
+# Build outputs (APKs, checksums, release notes).
+dist/
+
+# Upstream checkout, if NIGHTLY_CACHE_DIR points inside the repository.
+.cache/
+
+# Local configuration and signing material. Never commit these.
+release.env
+.env
+.env.*
+*.keystore
+*.jks
+*.p12

@@ -1,0 +1,31 @@
+# Toolchain for building the T3 Code Android Preview APK.
+# Versions follow upstream: node matches `engines` in package.json (^24.13.1),
+# vp matches the `vite-plus` catalog pin, and the Android SDK packages match
+# Expo SDK 58 / React Native 0.88 in apps/mobile.
+
+[tools]
+android-sdk = "19.0"
+gh = "2.102.0"
+java = "temurin-17.0.20+101"
+node = "24.21.0"
+vp = "1.0.0"
+
+[tasks.android-sdk]
+description = "Install Android SDK packages for Expo 58 / React Native 0.88"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+sdkmanager --licenses < <(yes)
+sdkmanager --install \
+  "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" \
+  "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+mise reshim
+'''
+
+[tasks.keystore]
+description = "Generate the release signing keystore (run once, then back it up)"
+run = "scripts/generate-keystore.sh"
+
+[tasks.release]
+description = "Build, verify and publish a nightly APK (pass --dry-run to skip GitHub)"
+run = "scripts/release.sh"
