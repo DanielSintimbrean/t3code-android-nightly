@@ -37,6 +37,19 @@ die() {
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The build saturates every core, so run it at idle priority to keep the
+# desktop usable. Under cgroup v2, nice only orders processes within one
+# cgroup, so prefer a separate scope with idle CPU weight. NIGHTLY_IDLE=0
+# disables this.
+if [[ "${NIGHTLY_IDLE:-1}" != 0 && -z "${NIGHTLY_IDLE_ACTIVE:-}" ]]; then
+  export NIGHTLY_IDLE_ACTIVE=1
+  if command -v systemd-run >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
+    exec systemd-run --user --scope --quiet -p CPUWeight=idle -p IOWeight=1 -- "${BASH_SOURCE[0]}" "$@"
+  fi
+  renice -n 19 -p $$ >/dev/null || true
+  ionice -c 3 -p $$ 2>/dev/null || true
+fi
+
 tag=""
 dry_run=0
 repo=""
