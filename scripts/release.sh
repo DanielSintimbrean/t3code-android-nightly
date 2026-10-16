@@ -301,6 +301,19 @@ for cmake_file in "$src"/node_modules/.pnpm/react-native-shiki-engine@*/node_mod
   fi
 done
 
+# expo-widgets imports Peek notification classes as io.github.jakex7.peek,
+# but the Peek 0.3.2 artifacts it declares publish those classes under
+# io.github.expo.peek. Rewrite the cached Android sources to match the AARs.
+widgets_src="$src/apps/mobile/node_modules/expo-widgets/android/src/main/java"
+if [[ -d "$widgets_src" ]] && grep -R -q --include='*.kt' 'io.github.jakex7.peek' "$widgets_src"; then
+  find "$widgets_src" -type f -name '*.kt' \
+    -exec sed -i 's/io\.github\.jakex7\.peek/io.github.expo.peek/g' {} +
+  if grep -R -q --include='*.kt' 'io.github.jakex7.peek' "$widgets_src"; then
+    die "could not patch Peek imports in $widgets_src"
+  fi
+  log "Patched Expo Widgets Peek package imports"
+fi
+
 log "Running expo prebuild (Android, preview)"
 (cd "$src/apps/mobile" && vp exec -- expo prebuild --platform android </dev/null)
 

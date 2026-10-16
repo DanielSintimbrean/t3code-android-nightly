@@ -27,3 +27,4 @@ Mirrors upstream `apps/mobile/README.md`: `vp i` at the root, then in `apps/mobi
 Build-time workarounds in `scripts/release.sh` (drop each one once upstream fixes it):
 
 - `react-native-shiki-engine` resolves `libonig.so` without `NO_DEFAULT_PATH`, so a host oniguruma package (`/usr/lib/libonig.so`) breaks the Android link. The script patches the cached copy of its `CMakeLists.txt`.
+- `expo-widgets` imports Peek notification classes under `io.github.jakex7.peek`, but its Peek 0.3.2 artifacts publish them under `io.github.expo.peek`. The script patches the cached Android Kotlin imports.
