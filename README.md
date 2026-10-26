@@ -15,7 +15,7 @@ Or download the APK manually from the [Releases page](https://github.com/DanielS
 Current build:
 
 <!-- current-build:start -->
-**[v0.1.3-nightly.20261025.3669](https://github.com/DanielSintimbrean/t3code-android-nightly/releases/tag/v0.1.3-nightly.20261025.3669)**, built from upstream commit [`5f64c5e`](https://github.com/pingdotgg/t3code/commit/5f64c5eb299a23d278ef043c416bd4dc801bc53c) on 2026-10-25.
+**[v0.1.3-nightly.20261026.3710](https://github.com/DanielSintimbrean/t3code-android-nightly/releases/tag/v0.1.3-nightly.20261026.3710)**, built from upstream commit [`f40c7c6`](https://github.com/pingdotgg/t3code/commit/f40c7c6435e390fc91f1d7eac6caf61bd9fe0e0e) on 2026-10-26.
 <!-- current-build:end -->
 
 What you get:
