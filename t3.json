@@ -3,9 +3,10 @@
   "scripts": [
     {
       "name": "Setup Worktree",
-      "command": "mise trust -q && ln -sf $T3CODE_PROJECT_ROOT/release.env release.env",
+      "command": "bash scripts/setup-worktree.sh",
       "icon": "configure",
-      "runOnWorktreeCreate": true
+      "runOnWorktreeCreate": true,
+      "async": false
     },
     {
       "name": "Release Dry Run",

@@ -15,7 +15,7 @@ Or download the APK manually from the [Releases page](https://github.com/DanielS
 Current build:
 
 <!-- current-build:start -->
-**[v0.1.8-nightly.20261104.4165](https://github.com/DanielSintimbrean/t3code-android-nightly/releases/tag/v0.1.8-nightly.20261104.4165)**, built from upstream commit [`8b44f42`](https://github.com/pingdotgg/t3code/commit/8b44f42b14c8e273156474a924ccf29680dd7857) on 2026-11-04.
+**[v0.1.8-nightly.20261104.4179](https://github.com/DanielSintimbrean/t3code-android-nightly/releases/tag/v0.1.8-nightly.20261104.4179)**, built from upstream commit [`9e85538`](https://github.com/pingdotgg/t3code/commit/9e85538535c8553901351112ab02dd1dd62db5ee) on 2026-11-04.
 <!-- current-build:end -->
 
 What you get:
@@ -59,6 +59,21 @@ Every release is signed with the same key. Its certificate SHA-256 is listed in 
    It is written to `~/.config/t3code-android-nightly/release.keystore` by default. Back up the keystore and its password. Every release must be signed with this key. If you lose it, users cannot update and have to uninstall and reinstall the app.
 
 4. Create the GitHub repository and push this branch. Releases commit to it.
+
+### Worktree setup
+
+Import the actions from `t3.json` in T3 Code's project settings once. A file in
+the repository does not register a setup action in an existing project by itself.
+The setup action runs `bash scripts/setup-worktree.sh` when T3 Code creates a
+worktree and waits for setup to finish before starting the agent (`async: false`).
+The script links `release.env` to the main checkout's configuration and trusts
+the local mise configuration. This repository has no Node dependencies to install.
+Keep the shared `release.env` in the main checkout; `.env` is not read by the
+release tooling. Missing shared configuration stops setup with an error, and
+an existing worktree configuration file is never overwritten.
+
+To set up an existing worktree, run `bash scripts/setup-worktree.sh` there.
+Outside a T3 setup hook, the script finds the main checkout through Git.
 
 ### Publishing a release
 
