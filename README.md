@@ -60,6 +60,21 @@ Every release is signed with the same key. Its certificate SHA-256 is listed in 
 
 4. Create the GitHub repository and push this branch. Releases commit to it.
 
+### Worktree setup
+
+Import the actions from `t3.json` in T3 Code's project settings once. A file in
+the repository does not register a setup action in an existing project by itself.
+The setup action runs `bash scripts/setup-worktree.sh` when T3 Code creates a
+worktree and waits for setup to finish before starting the agent (`async: false`).
+The script links `release.env` to the main checkout's configuration and trusts
+the local mise configuration. This repository has no Node dependencies to install.
+Keep the shared `release.env` in the main checkout; `.env` is not read by the
+release tooling. Missing shared configuration stops setup with an error, and
+an existing worktree configuration file is never overwritten.
+
+To set up an existing worktree, run `bash scripts/setup-worktree.sh` there.
+Outside a T3 setup hook, the script finds the main checkout through Git.
+
 ### Publishing a release
 
 ```sh
